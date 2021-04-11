@@ -1,6 +1,8 @@
-# DiscordEarsBot
+# DiscordEarsBot (with DeepSpeech model)
 A speech-to-text bot for Discord written in NodeJS.
 Can be useful for hearing impaired and deaf people.
+
+**This fork implements deepspeech transcription which is free, but not the best.**
 
 ## Demo:
 
