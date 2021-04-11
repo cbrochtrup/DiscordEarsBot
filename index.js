@@ -21,13 +21,6 @@ const { Readable } = require('stream');
 ///////////////// VARIA //////////////////
 //////////////////////////////////////////
 
-function necessary_dirs() {
-    if (!fs.existsSync('./data/')){
-        fs.mkdirSync('./data/');
-    }
-}
-necessary_dirs()
-
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -38,6 +31,7 @@ const WaveFile = require('wavefile').WaveFile;
 async function convert_audio(input) {
     try {
         fs.writeFileSync("input.wav", input);
+        // To make the Int16Array property view the data in our buffer
         const tmp = new Uint8Array(input)
         const data = new Int16Array(tmp.buffer)
 
@@ -82,7 +76,6 @@ function loadConfig() {
     
 }
 loadConfig()
-
 const https = require('https')
 function listWitAIApps(cb) {
     const options = {
@@ -211,18 +204,7 @@ discordClient.on('message', async (msg) => {
         }
         else if (msg.content.split('\n')[0].split(' ')[0].trim().toLowerCase() == _CMD_LANG) {
             const lang = msg.content.replace(_CMD_LANG, '').trim().toLowerCase()
-            listWitAIApps(data => {
-              if (!data.length)
-                return msg.reply('no apps found! :(')
-              for (const x of data) {
-                updateWitAIAppLang(x.id, lang, data => {
-                  if ('success' in data)
-                    msg.reply('succes!')
-                  else if ('error' in data && data.error !== 'Access token does not match')
-                    msg.reply('Error: ' + data.error)
-                })
-              }
-            })
+            msg.reply('LANGUAGE Command not implemented yet')
         }
     } catch (e) {
         console.log('discordClient message: ' + e)
@@ -334,42 +316,6 @@ async function transcribe(buffer) {
   // return transcribe_gspeech(buffer)
 }
 
-// WitAI
-let witAI_lastcallTS = null;
-const witClient = require('node-witai-speech');
-async function transcribe_witai(buffer) {
-    try {
-        // ensure we do not send more than one request per second
-        if (witAI_lastcallTS != null) {
-            let now = Math.floor(new Date());    
-            while (now - witAI_lastcallTS < 1000) {
-                console.log('sleep')
-                await sleep(100);
-                now = Math.floor(new Date());
-            }
-        }
-    } catch (e) {
-        console.log('transcribe_witai 837:' + e)
-    }
-
-    try {
-        console.log('transcribe_witai')
-        const extractSpeechIntent = util.promisify(witClient.extractSpeechIntent);
-        var stream = Readable.from(buffer);
-        const contenttype = "audio/raw;encoding=signed-integer;bits=16;rate=48k;endian=little"
-        const output = await extractSpeechIntent(WITAPIKEY, stream, contenttype)
-        witAI_lastcallTS = Math.floor(new Date());
-        console.log(output)
-        stream.destroy()
-        if (output && '_text' in output && output._text.length)
-            return output._text
-        if (output && 'text' in output && output.text.length)
-            return output.text
-        return output;
-    } catch (e) { console.log('transcribe_witai 851:' + e); console.log(e) }
-}
-
-
 const DeepSpeech = require('deepspeech');
 
 let modelPath = './models/deepspeech-0.9.3-models.pbmm';
@@ -383,41 +329,6 @@ async function transcribe_deepspeech(wavObj) {
     let result = model.stt(wavObj.toBuffer());
     console.log('result:', result);
     return result;
-}
-
-// Google Speech API
-// https://cloud.google.com/docs/authentication/production
-const gspeech = require('@google-cloud/speech');
-const gspeechclient = new gspeech.SpeechClient({
-  projectId: 'discordbot',
-  keyFilename: 'gspeech_key.json'
-});
-
-async function transcribe_gspeech(buffer) {
-  try {
-      console.log('transcribe_gspeech')
-      const bytes = buffer.toString('base64');
-      const audio = {
-        content: bytes,
-      };
-      const config = {
-        encoding: 'LINEAR16',
-        sampleRateHertz: 48000,
-        languageCode: 'en-US',  // https://cloud.google.com/speech-to-text/docs/languages
-      };
-      const request = {
-        audio: audio,
-        config: config,
-      };
-
-      const [response] = await gspeechclient.recognize(request);
-      const transcription = response.results
-        .map(result => result.alternatives[0].transcript)
-        .join('\n');
-      console.log(`gspeech: ${transcription}`);
-      return transcription;
-
-  } catch (e) { console.log('transcribe_gspeech 368:' + e) }
 }
 
 //////////////////////////////////////////
