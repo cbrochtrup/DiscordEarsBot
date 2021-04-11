@@ -34,16 +34,23 @@ function sleep(ms) {
   });
 }
 
+const WaveFile = require('wavefile').WaveFile;
 async function convert_audio(input) {
     try {
-        // stereo to mono channel
-        const data = new Int16Array(input)
+        fs.writeFileSync("input.wav", input);
+        const tmp = new Uint8Array(input)
+        const data = new Int16Array(tmp.buffer)
+
+	wav = new WaveFile();
+	wav.fromScratch(2, 48000, "16", data)
+        // Convert two channels to one channel
         const ndata = new Int16Array(data.length/2)
-        for (let i = 0, j = 0; i < data.length; i+=4) {
+        for (let i = 0, j = 0; i < data.length; i+=2) {
             ndata[j++] = data[i]
-            ndata[j++] = data[i+1]
         }
-        return Buffer.from(ndata);
+	wav2 = new WaveFile();
+	wav2.fromScratch(1, 48000, "16", ndata)
+        return wav2
     } catch (e) {
         console.log(e)
         console.log('convert_audio: ' + e)
@@ -62,20 +69,15 @@ async function convert_audio(input) {
 const SETTINGS_FILE = 'settings.json';
 
 let DISCORD_TOK = null;
-let WITAPIKEY = null; 
-let SPOTIFY_TOKEN_ID = null;
-let SPOTIFY_TOKEN_SECRET = null;
 
 function loadConfig() {
     if (fs.existsSync(SETTINGS_FILE)) {
         const CFG_DATA = JSON.parse( fs.readFileSync(SETTINGS_FILE, 'utf8') );
         DISCORD_TOK = CFG_DATA.discord_token;
-        WITAPIKEY = CFG_DATA.wit_ai_token;
     } else {
         DISCORD_TOK = process.env.DISCORD_TOK;
-        WITAPIKEY = process.env.WITAPIKEY;
     }
-    if (!DISCORD_TOK || !WITAPIKEY)
+    if (!DISCORD_TOK)
         throw 'failed loading config #113 missing keys!'
     
 }
@@ -285,11 +287,12 @@ function speak_impl(voice_Connection, mapKey) {
         audioStream.on('error',  (e) => { 
             console.log('audioStream: ' + e)
         });
+
         let buffer = [];
         audioStream.on('data', (data) => {
             buffer.push(data)
         })
-        audioStream.on('end', async () => {
+        audioStream.on('finish', async () => {
             buffer = Buffer.concat(buffer)
             const duration = buffer.length / 48000 / 4;
             console.log("duration: " + duration)
@@ -300,8 +303,8 @@ function speak_impl(voice_Connection, mapKey) {
             }
 
             try {
-                let new_buffer = await convert_audio(buffer)
-                let out = await transcribe(new_buffer);
+                let wavObj = await convert_audio(buffer)
+                let out = await transcribe(wavObj);
                 if (out != null)
                     process_commands_query(out, mapKey, user);
             } catch (e) {
@@ -326,7 +329,8 @@ function process_commands_query(txt, mapKey, user) {
 //////////////////////////////////////////
 async function transcribe(buffer) {
 
-  return transcribe_witai(buffer)
+  return transcribe_deepspeech(buffer)
+  // return transcribe_witai(buffer)
   // return transcribe_gspeech(buffer)
 }
 
@@ -363,6 +367,22 @@ async function transcribe_witai(buffer) {
             return output.text
         return output;
     } catch (e) { console.log('transcribe_witai 851:' + e); console.log(e) }
+}
+
+
+const DeepSpeech = require('deepspeech');
+
+let modelPath = './models/deepspeech-0.9.3-models.pbmm';
+let model = new DeepSpeech.Model(modelPath);
+let desiredSampleRate = model.sampleRate();
+let scorerPath = './models/deepspeech-0.9.3-models.scorer';
+model.enableExternalScorer(scorerPath);
+
+async function transcribe_deepspeech(wavObj) {
+    wavObj.toSampleRate(desiredSampleRate)
+    let result = model.stt(wavObj.toBuffer());
+    console.log('result:', result);
+    return result;
 }
 
 // Google Speech API
