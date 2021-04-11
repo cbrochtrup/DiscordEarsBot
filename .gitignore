@@ -2,6 +2,7 @@ gspeech_key.json
 settings.json
 data/
 temp/
+models/
 screenlog*
 Dockerfile
 
